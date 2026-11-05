@@ -52,6 +52,10 @@ The research overview, project timeline and data feeds tracker are maintained in
 
 Do not commit API keys, passwords or restricted datasets. Record data sources and access requirements so other team members can reproduce the analysis.
 
-## Project lead
+## Project Team
 
 Caner Karakoc — Director of Portfolio Construction
+
+Flynn Lamper - Quantitative Analyst
+
+Josh Hind - Quantitative Analyst
