@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from scipy.cluster.hierarchy import linkage, dendrogram, leaves_list
-from scipy.spatial.distance import squareform
+from scipy.spatial.distance import pdist, squareform
 
 
 # --------------------------------------------------
@@ -77,9 +77,22 @@ def load_returns():
 
 
 def calculate_clustering(returns):
+    """
+    Calculate correlation, primary distance and secondary distance,
+    then perform hierarchical clustering.
+
+    The primary distance measures the dissimilarity between each
+    pair of assets based on their correlation.
+
+    The secondary distance measures the dissimilarity between
+    the primary distance profiles of each pair of assets.
+    """
+
+    # 1. Calculate the correlation matrix
     correlation = returns.corr()
 
-    distance_values = np.sqrt(
+    # 2. Calculate the primary distance matrix
+    primary_distance_values = np.sqrt(
         np.clip(
             (1.0 - correlation.to_numpy(dtype=float)) / 2.0,
             0.0,
@@ -87,24 +100,34 @@ def calculate_clustering(returns):
         )
     )
 
-    np.fill_diagonal(distance_values, 0.0)
+    np.fill_diagonal(primary_distance_values, 0.0)
 
-    condensed_distance = squareform(distance_values, checks=True)
+    # 3. Calculate the secondary distance matrix
+    # Compare the primary distance profiles of each asset.
+    secondary_distance_values = squareform(
+        pdist(
+            primary_distance_values.T,
+            metric="euclidean"
+        )
+    )
 
+    # 4. Convert the secondary distance matrix into
+    # the condensed format required by SciPy linkage.
+    condensed_secondary_distance = squareform(
+        secondary_distance_values,
+        checks=True
+    )
+
+    # 5. Perform hierarchical clustering using single linkage
     linkage_matrix = linkage(
-        condensed_distance,
+        condensed_secondary_distance,
         method="single"
     )
 
+    # 6. Obtain the quasi-diagonal asset ordering
     leaf_order = leaves_list(linkage_matrix)
+
     ordered_assets = returns.columns[leaf_order].tolist()
-
-    return correlation, linkage_matrix, ordered_assets
-
-
-    # Order assets according to dendrogram leaves
-    ordered_indices = leaves_list(linkage_matrix)
-    ordered_assets = correlation.columns[ordered_indices]
 
     return correlation, linkage_matrix, ordered_assets
 
