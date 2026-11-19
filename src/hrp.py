@@ -195,23 +195,82 @@ def calculate_hrp_weights(returns, ordered_assets):
 
     recursive_bisection(list(ordered_assets))
 
-    # Return weights in the original asset order
-    weights = weights.reindex(ASSETS)
+    # Return weights in the original input order
+    weights = weights.reindex(returns.columns)
     weights = weights / weights.sum()
 
     return weights
+
+
+def calculate_weights(returns_window):
+    """Calculate HRP weights for a window of asset returns."""
+
+    _, _, ordered_assets = calculate_clustering(returns_window)
+    return calculate_hrp_weights(returns_window, ordered_assets)
+
+def diagnose_hrp_splits(returns, ordered_assets):
+    """Print cluster variances and allocations at every HRP split."""
+
+    covariance = returns.cov()
+
+    def inspect(cluster, level=0):
+
+        if len(cluster) <= 1:
+            return
+
+        split = len(cluster) // 2
+
+        left_cluster = cluster[:split]
+        right_cluster = cluster[split:]
+
+        left_variance = get_cluster_variance(
+            covariance, left_cluster
+        )
+
+        right_variance = get_cluster_variance(
+            covariance, right_cluster
+        )
+
+        total_variance = left_variance + right_variance
+
+        left_allocation = (
+            right_variance / total_variance
+        )
+
+        right_allocation = (
+            left_variance / total_variance
+        )
+
+        indent = "    " * level
+
+        print(f"\n{indent}Split: {cluster}")
+        print(f"{indent}Left cluster: {left_cluster}")
+        print(f"{indent}Right cluster: {right_cluster}")
+        print(f"{indent}Left variance: {left_variance:.8f}")
+        print(f"{indent}Right variance: {right_variance:.8f}")
+        print(f"{indent}Left allocation: {left_allocation:.2%}")
+        print(f"{indent}Right allocation: {right_allocation:.2%}")
+
+        inspect(left_cluster, level + 1)
+        inspect(right_cluster, level + 1)
+
+    inspect(list(ordered_assets))
+
 
 
 # --------------------------------------------------
 # 5. Save visualisations
 # --------------------------------------------------
 
-def save_heatmap(correlation, ordered_assets):
-    """Save the reordered asset correlation heatmap."""
+
+def save_heatmap(correlation, ordered_assets, period_name):
+    """Save the reordered asset correlation heatmap for a period."""
 
     ordered_correlation = correlation.loc[
         ordered_assets, ordered_assets
     ]
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     plt.figure(figsize=(9, 7))
 
@@ -226,11 +285,11 @@ def save_heatmap(correlation, ordered_assets):
         square=True,
     )
 
-    plt.title("Asset Return Correlation Matrix (2015–2026)")
+    plt.title(f"Asset Return Correlation Matrix ({period_name})")
     plt.tight_layout()
 
     plt.savefig(
-        OUTPUT_DIR / "correlation_heatmap.png",
+        OUTPUT_DIR / f"correlation_heatmap_{period_name}.png",
         dpi=300,
         bbox_inches="tight",
     )
@@ -238,8 +297,10 @@ def save_heatmap(correlation, ordered_assets):
     plt.close()
 
 
-def save_dendrogram(linkage_matrix, assets):
-    """Save the hierarchical clustering dendrogram."""
+def save_dendrogram(linkage_matrix, assets, period_name):
+    """Save the hierarchical clustering dendrogram for a period."""
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     plt.figure(figsize=(10, 6))
 
@@ -250,13 +311,13 @@ def save_dendrogram(linkage_matrix, assets):
         leaf_font_size=11,
     )
 
-    plt.title("Hierarchical Clustering Dendrogram")
+    plt.title(f"Hierarchical Clustering Dendrogram ({period_name})")
     plt.xlabel("Assets")
-    plt.ylabel("Correlation Distance")
+    plt.ylabel("Secondary Distance")
     plt.tight_layout()
 
     plt.savefig(
-        OUTPUT_DIR / "dendrogram.png",
+        OUTPUT_DIR / f"dendrogram_{period_name}.png",
         dpi=300,
         bbox_inches="tight",
     )
@@ -279,6 +340,11 @@ def main():
         returns, ordered_assets
     )
 
+    # Portfolio concentration diagnostics
+    maximum_weight = weights.max()
+    hhi = (weights ** 2).sum()
+    effective_holdings = 1 / hhi
+
     # Save results
     correlation.to_csv(
         OUTPUT_DIR / "correlation_matrix.csv"
@@ -300,12 +366,17 @@ def main():
     print("\nHierarchical asset ordering:")
     print(list(ordered_assets))
 
-    print("\nPreliminary HRP portfolio weights:")
+    print("\n HRP portfolio weights:")
     print((weights * 100).round(2).astype(str) + "%")
 
+    print("\n HRP portfolio diagnostics:")
+    print("\nPortfolio concentration diagnostics:")
+    print(f"Maximum allocation: {maximum_weight:.2%}")
+    print(f"HHI: {hhi:.4f}")
+    print(f"Effective holdings: {effective_holdings:.2f}")
     print(f"\nTotal weight: {weights.sum():.6f}")
-    print(f"\nResults saved to: {OUTPUT_DIR}")
 
+    print(f"\nResults saved to: {OUTPUT_DIR}")
 
 if __name__ == "__main__":
     main()
